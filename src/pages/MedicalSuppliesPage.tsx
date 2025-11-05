@@ -596,7 +596,7 @@ export function MedicalSuppliesPage() {
 
         {/* Edit Item Modal */}
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Item</DialogTitle>
               <DialogDescription>
