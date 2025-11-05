@@ -231,7 +231,7 @@ export function MedicalSuppliesPage() {
 
       if (editingItem) {
         // Update existing item
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('medical_supplies')
           .update(databaseData)
           .eq('id', editingItem.id)
@@ -243,10 +243,59 @@ export function MedicalSuppliesPage() {
           return;
         }
 
+        // Build updated item either from returned row or from local form data as a fallback
+        const updatedRow = (data && data[0]) as any | undefined;
+        const updatedItem: SupplyItem = updatedRow
+          ? {
+              id: updatedRow.id,
+              name: updatedRow.name,
+              description: updatedRow.description || "",
+              lotNumber: updatedRow.lot_number || "",
+              expiresOn: updatedRow.expires_on || "",
+              quantity: updatedRow.quantity || 0,
+              imageUrl: updatedRow.image_url || "/logo.png",
+              isExpired: updatedRow.is_expired || false,
+              typeOfSupply: updatedRow.type_of_supply || "",
+              palletLocation: updatedRow.pallet_location || "",
+              company: updatedRow.company || "",
+              cardboardBoxesPerPallet: updatedRow.cardboard_boxes_per_pallet || 0,
+              unitBoxesPerCardboard: updatedRow.unit_boxes_per_cardboard || 0,
+              unitsPerBox: updatedRow.units_per_box || 0,
+              weightPerCardboardBox: updatedRow.weight_per_cardboard_box || 0,
+              dimensionsCardboardBox: updatedRow.dimensions_cardboard_box || "",
+              costPerUnitBox: updatedRow.cost_per_unit_box || 0,
+              costPerCardboardBox: updatedRow.cost_per_cardboard_box || 0,
+              relevantLink: updatedRow.relevant_link || "",
+              otherNotes: updatedRow.other_notes || "",
+            }
+          : {
+              id: editingItem.id,
+              name: formData.name || editingItem.name,
+              description: formData.description ?? editingItem.description,
+              lotNumber: formData.lotNumber ?? editingItem.lotNumber,
+              expiresOn: formData.expiresOn ?? editingItem.expiresOn,
+              quantity: formData.quantity ?? editingItem.quantity,
+              imageUrl: formData.imageUrl ?? editingItem.imageUrl,
+              isExpired: formData.isExpired ?? editingItem.isExpired,
+              typeOfSupply: formData.typeOfSupply ?? editingItem.typeOfSupply,
+              palletLocation: formData.palletLocation ?? editingItem.palletLocation,
+              company: formData.company ?? editingItem.company,
+              cardboardBoxesPerPallet: formData.cardboardBoxesPerPallet ?? editingItem.cardboardBoxesPerPallet,
+              unitBoxesPerCardboard: formData.unitBoxesPerCardboard ?? editingItem.unitBoxesPerCardboard,
+              unitsPerBox: formData.unitsPerBox ?? editingItem.unitsPerBox,
+              weightPerCardboardBox: formData.weightPerCardboardBox ?? editingItem.weightPerCardboardBox,
+              dimensionsCardboardBox: formData.dimensionsCardboardBox ?? editingItem.dimensionsCardboardBox,
+              costPerUnitBox: formData.costPerUnitBox ?? editingItem.costPerUnitBox,
+              costPerCardboardBox: formData.costPerCardboardBox ?? editingItem.costPerCardboardBox,
+              relevantLink: formData.relevantLink ?? editingItem.relevantLink,
+              otherNotes: formData.otherNotes ?? editingItem.otherNotes,
+            };
+
+        setItems(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
         toast.success("Item updated successfully!");
       } else {
         // Create new item
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('medical_supplies')
           .insert([databaseData])
           .select();
@@ -257,11 +306,38 @@ export function MedicalSuppliesPage() {
           return;
         }
 
+        if (!data || data.length === 0) {
+          // If the API didn't return the new row (e.g., RLS/returning config), refetch to stay consistent
+          fetchItems();
+        } else {
+          const newRow = data[0] as any;
+          const newItem: SupplyItem = {
+            id: newRow.id,
+            name: newRow.name,
+            description: newRow.description || "",
+            lotNumber: newRow.lot_number || "",
+            expiresOn: newRow.expires_on || "",
+            quantity: newRow.quantity || 0,
+            imageUrl: newRow.image_url || "/logo.png",
+            isExpired: newRow.is_expired || false,
+            typeOfSupply: newRow.type_of_supply || "",
+            palletLocation: newRow.pallet_location || "",
+            company: newRow.company || "",
+            cardboardBoxesPerPallet: newRow.cardboard_boxes_per_pallet || 0,
+            unitBoxesPerCardboard: newRow.unit_boxes_per_cardboard || 0,
+            unitsPerBox: newRow.units_per_box || 0,
+            weightPerCardboardBox: newRow.weight_per_cardboard_box || 0,
+            dimensionsCardboardBox: newRow.dimensions_cardboard_box || "",
+            costPerUnitBox: newRow.cost_per_unit_box || 0,
+            costPerCardboardBox: newRow.cost_per_cardboard_box || 0,
+            relevantLink: newRow.relevant_link || "",
+            otherNotes: newRow.other_notes || "",
+          };
+
+          setItems(prev => [newItem, ...prev]);
+        }
         toast.success("Item created successfully!");
       }
-
-      // Refresh the data
-      await fetchItems();
       
       // Close modals
       setIsEditModalOpen(false);
@@ -499,15 +575,20 @@ export function MedicalSuppliesPage() {
                     <p className="text-gray-700">{selectedItem.otherNotes}</p>
                   </div>
                 )}
-                
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex justify-between items-center gap-3 pt-4 border-t">
+                <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setIsItemModalOpen(false)}>
                     Close
                   </Button>
                   <Button onClick={() => selectedItem && openEditModal(selectedItem)}>
                     Edit Item
                   </Button>
-                </div>
+                 
+                </div> 
+                <Button className="ml-end">
+                    Delete Item
+                  </Button>
+              </div>
               </div>
             )}
           </DialogContent>
