@@ -350,6 +350,34 @@ export function MedicalSuppliesPage() {
     }
   };
 
+  const handleDeleteItem = async () => {
+    if (!selectedItem) {
+      toast.error("No item selected for deletion");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('medical_supplies')
+        .delete()
+        .eq('id', selectedItem.id);
+
+      if (error) {
+        console.error("Error deleting item:", error);
+        toast.error("Failed to delete item");
+        return;
+      }
+
+      setItems(prev => prev.filter(item => item.id !== selectedItem.id));
+      toast.success("Item deleted successfully!");
+      setIsItemModalOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      toast.error("Failed to delete item");
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -371,9 +399,16 @@ export function MedicalSuppliesPage() {
               <h1 className="text-2xl font-semibold">B4P Surplus Medical Supplies</h1>
               <p className="text-sm text-gray-600">Browse, search, and organize available items</p>
             </div>
-            <Button onClick={handleSignOut} variant="outline">
-              Sign Out
-            </Button>
+            <div className="flex items-center gap-4">
+              {session?.user?.email && (
+                <span className="text-sm text-gray-600">
+                  Signed in as: <span className="font-medium text-gray-900">{session.user.email}</span>
+                </span>
+              )}
+              <Button onClick={handleSignOut} variant="outline">
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -585,7 +620,11 @@ export function MedicalSuppliesPage() {
                   </Button>
                  
                 </div> 
-                <Button className="ml-end">
+                <Button 
+                  variant="destructive" 
+                  onClick={handleDeleteItem}
+                  className="bg-red-600 hover:bg-red-700"
+                >
                     Delete Item
                   </Button>
               </div>

@@ -67,10 +67,22 @@ export function AuthPage() {
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check if email is already in use
+        if (
+          error.message.toLowerCase().includes("already registered") ||
+          error.message.toLowerCase().includes("user already exists") ||
+          error.message.toLowerCase().includes("email already") ||
+          error.message.toLowerCase().includes("already exists")
+        ) {
+          toast.error("This email is already registered. Please sign in instead.");
+          return;
+        }
+        throw error;
+      }
 
       toast.success(
-        "Registration successful! Please check your email for verification."
+        "Registration successful! Please check your email for authentication."
       );
       setActiveTab("login");
     } catch (e) {
