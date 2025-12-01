@@ -51,6 +51,9 @@ export function MedicalSuppliesPage() {
   const [isNewItemModalOpen, setIsNewItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<SupplyItem | null>(null);
   const [formData, setFormData] = useState<Partial<SupplyItem>>({});
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const canManage = userRoles.includes("admin") || userRoles.includes("volunteer");
+  const isAdmin = userRoles.includes("admin");
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -58,6 +61,54 @@ export function MedicalSuppliesPage() {
       navigate("/");
     }
   }, [session, navigate]);
+
+  // Fetch current user's roles (admin/volunteer/visitor)
+  useEffect(() => {
+    const fetchUserRoles = async () => {
+      try {
+        if (!session?.user?.id) {
+          setUserRoles([]);
+          return;
+        }
+
+        const { data: userRolesRows, error: userRolesError } = await supabase
+          .from("user_roles")
+          .select("role_id")
+          .eq("user_id", session.user.id);
+
+        if (userRolesError) {
+          console.error("Error fetching user_roles:", userRolesError);
+          setUserRoles([]);
+          return;
+        }
+
+        const roleIds = (userRolesRows || []).map((r: any) => r.role_id).filter(Boolean);
+        if (!roleIds.length) {
+          setUserRoles([]);
+          return;
+        }
+
+        const { data: rolesRows, error: rolesError } = await supabase
+          .from("roles")
+          .select("id, role_name")
+          .in("id", roleIds);
+
+        if (rolesError) {
+          console.error("Error fetching roles:", rolesError);
+          setUserRoles([]);
+          return;
+        }
+
+        const roleNames: string[] = (rolesRows || []).map((r: any) => r.role_name);
+        setUserRoles(roleNames);
+      } catch (err) {
+        console.error("Unexpected error fetching roles:", err);
+        setUserRoles([]);
+      }
+    };
+
+    fetchUserRoles();
+  }, [session]);
 
 
   // Fetch data from Supabase
@@ -168,6 +219,7 @@ export function MedicalSuppliesPage() {
   };
 
   const openEditModal = (item: SupplyItem) => {
+    if (!canManage) return;
     setEditingItem(item);
     setFormData(item);
     setIsEditModalOpen(true);
@@ -175,6 +227,7 @@ export function MedicalSuppliesPage() {
   };
 
   const openNewItemModal = () => {
+    if (!canManage) return;
     setEditingItem(null);
     setFormData({
       name: "",
@@ -405,9 +458,22 @@ export function MedicalSuppliesPage() {
                   Signed in as: <span className="font-medium text-gray-900">{session.user.email}</span>
                 </span>
               )}
+              {isAdmin && (
+                <a
+                  href="/admin/users"
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  aria-label="Go to Admin Users Management"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4zM4 20a8 8 0 0116 0" />
+                  </svg>
+                  Admin
+                </a>
+              )}
               <Button onClick={handleSignOut} variant="outline">
                 Sign Out
               </Button>
+              
             </div>
           </div>
         </div>
@@ -463,21 +529,27 @@ export function MedicalSuppliesPage() {
                   <SelectItem value="PPE">PPE</SelectItem>
                   <SelectItem value="Needles and Syringes">Needles and Syringes</SelectItem>
                   <SelectItem value="Wound Care">Wound Care</SelectItem>
+                  <SelectItem value="Surgical">Surgical</SelectItem>
+                  <SelectItem value="Diagnostic">Diagnostic</SelectItem>
+                  <SelectItem value="Emergency">Emergency</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </section>
 
-        {/* New Item Button */}
-        <section className="flex justify-end mb-4">
-          <Button onClick={openNewItemModal} className="bg-green-600 hover:bg-green-700">
-            <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path>
-            </svg>
-            New Item
-          </Button>
-        </section>
+        {/* New Item Button (hidden for visitors) */}
+        {canManage && (
+          <section className="flex justify-end mb-4">
+            <Button onClick={openNewItemModal} className="bg-green-600 hover:bg-green-700">
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              New Item
+            </Button>
+          </section>
+        )}
 
         {/* Table */}
         <section className="overflow-hidden rounded-md border bg-white">
@@ -611,23 +683,26 @@ export function MedicalSuppliesPage() {
                   </div>
                 )}
                 <div className="flex justify-between items-center gap-3 pt-4 border-t">
-                <div className="flex justify-end gap-3">
-                  <Button variant="outline" onClick={() => setIsItemModalOpen(false)}>
-                    Close
-                  </Button>
-                  <Button onClick={() => selectedItem && openEditModal(selectedItem)}>
-                    Edit Item
-                  </Button>
-                 
-                </div> 
-                <Button 
-                  variant="destructive" 
-                  onClick={handleDeleteItem}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                    Delete Item
-                  </Button>
-              </div>
+                  <div className="flex justify-end gap-3">
+                    <Button variant="outline" onClick={() => setIsItemModalOpen(false)}>
+                      Close
+                    </Button>
+                    {canManage && (
+                      <Button onClick={() => selectedItem && openEditModal(selectedItem)}>
+                        Edit Item
+                      </Button>
+                    )}
+                  </div>
+                  {canManage && (
+                    <Button
+                      variant="destructive"
+                      onClick={handleDeleteItem}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete Item
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </DialogContent>
