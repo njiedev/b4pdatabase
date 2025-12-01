@@ -52,6 +52,9 @@ export function MedicalSuppliesPage() {
   const [editingItem, setEditingItem] = useState<SupplyItem | null>(null);
   const [formData, setFormData] = useState<Partial<SupplyItem>>({});
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const canManage = userRoles.includes("admin") || userRoles.includes("volunteer");
   const isAdmin = userRoles.includes("admin");
 
@@ -218,10 +221,75 @@ export function MedicalSuppliesPage() {
     }));
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error("Please select an image file");
+        return;
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size must be less than 5MB");
+        return;
+      }
+      setImageFile(file);
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadImageToStorage = async (file: File, itemId?: string): Promise<string | null> => {
+    try {
+      setUploadingImage(true);
+      
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = itemId 
+        ? `${itemId}-${Date.now()}.${fileExt}`
+        : `temp-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `medical-supplies/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('medical-supplies-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error("Error uploading image:", uploadError);
+        toast.error("Failed to upload image");
+        return null;
+      }
+
+      // Get public URL
+      const { data } = supabase.storage
+        .from('medical-supplies-images')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast.error("Failed to upload image");
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const openEditModal = (item: SupplyItem) => {
     if (!canManage) return;
     setEditingItem(item);
     setFormData(item);
+    setImageFile(null);
+    setImagePreview(null);
     setIsEditModalOpen(true);
     setIsItemModalOpen(false);
   };
@@ -250,6 +318,8 @@ export function MedicalSuppliesPage() {
       relevantLink: "",
       otherNotes: "",
     });
+    setImageFile(null);
+    setImagePreview(null);
     setIsNewItemModalOpen(true);
   };
 
@@ -260,13 +330,25 @@ export function MedicalSuppliesPage() {
         return;
       }
 
+      // Upload image if a new file was selected (for editing existing items)
+      let imageUrl = formData.imageUrl || "/logo.png";
+      if (imageFile && editingItem) {
+        const uploadedUrl = await uploadImageToStorage(imageFile, editingItem.id);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        } else {
+          // If upload failed, use existing image
+          imageUrl = editingItem.imageUrl;
+        }
+      }
+
       const databaseData = {
         name: formData.name,
         description: formData.description || "",
         lot_number: formData.lotNumber || "",
         expires_on: formData.expiresOn,
         quantity: formData.quantity || 0,
-        image_url: formData.imageUrl || "/logo.png",
+        image_url: imageUrl,
         is_expired: formData.isExpired || false,
         type_of_supply: formData.typeOfSupply,
         pallet_location: formData.palletLocation || "",
@@ -347,10 +429,21 @@ export function MedicalSuppliesPage() {
         setItems(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
         toast.success("Item updated successfully!");
       } else {
-        // Create new item
+        // Create new item first (without image if uploading)
+        let tempImageUrl = imageUrl;
+        if (imageFile) {
+          // For new items, we'll upload image after creation
+          tempImageUrl = "/logo.png";
+        }
+
+        const createData = {
+          ...databaseData,
+          image_url: tempImageUrl,
+        };
+
         const { data, error } = await supabase
           .from('medical_supplies')
-          .insert([databaseData])
+          .insert([createData])
           .select();
 
         if (error) {
@@ -364,6 +457,21 @@ export function MedicalSuppliesPage() {
           fetchItems();
         } else {
           const newRow = data[0] as any;
+          let finalImageUrl = newRow.image_url || "/logo.png";
+
+          // Upload image for new item if one was selected
+          if (imageFile) {
+            const uploadedUrl = await uploadImageToStorage(imageFile, newRow.id);
+            if (uploadedUrl) {
+              finalImageUrl = uploadedUrl;
+              // Update the item with the uploaded image URL
+              await supabase
+                .from('medical_supplies')
+                .update({ image_url: uploadedUrl })
+                .eq('id', newRow.id);
+            }
+          }
+
           const newItem: SupplyItem = {
             id: newRow.id,
             name: newRow.name,
@@ -371,7 +479,7 @@ export function MedicalSuppliesPage() {
             lotNumber: newRow.lot_number || "",
             expiresOn: newRow.expires_on || "",
             quantity: newRow.quantity || 0,
-            imageUrl: newRow.image_url || "/logo.png",
+            imageUrl: finalImageUrl,
             isExpired: newRow.is_expired || false,
             typeOfSupply: newRow.type_of_supply || "",
             palletLocation: newRow.pallet_location || "",
@@ -392,11 +500,13 @@ export function MedicalSuppliesPage() {
         toast.success("Item created successfully!");
       }
       
-      // Close modals
+      // Close modals and reset form
       setIsEditModalOpen(false);
       setIsNewItemModalOpen(false);
       setFormData({});
       setEditingItem(null);
+      setImageFile(null);
+      setImagePreview(null);
     } catch (error) {
       console.error("Error saving item:", error);
       toast.error("Failed to save item");
@@ -630,6 +740,7 @@ export function MedicalSuppliesPage() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
+                    
                     <h3 className="text-lg font-medium mb-4">Basic Information</h3>
                     <div className="space-y-2">
                       <p><span className="font-medium">Description:</span> {selectedItem.description}</p>
@@ -837,6 +948,30 @@ export function MedicalSuppliesPage() {
                         value={formData.palletLocation || ""}
                         onChange={(e) => handleInputChange("palletLocation", e.target.value)}
                       />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="editImage" className="block text-sm font-medium text-gray-700 mb-1">Item Image</Label>
+                      <Input
+                        id="editImage"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        className="cursor-pointer"
+                      />
+                      {uploadingImage && (
+                        <p className="text-sm text-gray-500 mt-1">Uploading image...</p>
+                      )}
+                      {(imagePreview || formData.imageUrl) && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500 mb-1">Preview:</p>
+                          <img
+                            src={imagePreview || formData.imageUrl || "/logo.png"}
+                            alt="Preview"
+                            className="h-32 w-48 object-cover rounded border border-gray-200"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1066,6 +1201,30 @@ export function MedicalSuppliesPage() {
                         value={formData.palletLocation || ""}
                         onChange={(e) => handleInputChange("palletLocation", e.target.value)}
                       />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="newItemImage" className="block text-sm font-medium text-gray-700 mb-1">Item Image</Label>
+                      <Input
+                        id="newItemImage"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        className="cursor-pointer"
+                      />
+                      {uploadingImage && (
+                        <p className="text-sm text-gray-500 mt-1">Uploading image...</p>
+                      )}
+                      {imagePreview && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500 mb-1">Preview:</p>
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="h-32 w-48 object-cover rounded border border-gray-200"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
