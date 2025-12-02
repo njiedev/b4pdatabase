@@ -886,7 +886,7 @@ export function MedicalSuppliesPage() {
 
                     <div>
                       <Label htmlFor="editExpiresOn" className="block text-sm font-medium text-gray-700 mb-1">
-                        Expiration Date <span className="text-red-500">*</span>
+                        Expiration Date <span className="text-red-500">*</span> <span className="text-gray-500">(if unknown, mark date as 00/00/0000)</span> 
                       </Label>
                       <Input
                         id="editExpiresOn"
@@ -1139,7 +1139,7 @@ export function MedicalSuppliesPage() {
 
                     <div>
                       <Label htmlFor="newItemExpiresOn" className="block text-sm font-medium text-gray-700 mb-1">
-                        Expiration Date <span className="text-red-500">*</span>
+                        Expiration Date <span className="text-red-500">*</span> <span className="text-gray-500">(if unknown, mark date as 00/00/0000)</span>
                       </Label>
                       <Input
                         id="newItemExpiresOn"
