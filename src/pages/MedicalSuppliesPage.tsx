@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import supabase from "@/supabase";
 import { useSession } from "@/context/SessionContext";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +23,8 @@ interface SupplyItem {
   quantity: number;
   imageUrl: string;
   isExpired: boolean;
+  isDonated: boolean;
+  isArchived: boolean;
   typeOfSupply: string;
   palletLocation: string;
   company: string;
@@ -55,6 +58,7 @@ export function MedicalSuppliesPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [activeTab, setActiveTab] = useState("inventory");
   const canManage = userRoles.includes("admin") || userRoles.includes("volunteer");
   const isAdmin = userRoles.includes("admin");
 
@@ -146,6 +150,8 @@ export function MedicalSuppliesPage() {
         quantity: item.quantity || 0,
         imageUrl: item.image_url || "/logo.png",
         isExpired: item.is_expired || false,
+        isDonated: item.is_donated || false,
+        isArchived: item.is_archived || false,
         typeOfSupply: item.type_of_supply || "",
         palletLocation: item.pallet_location || "",
         company: item.company || "",
@@ -176,7 +182,7 @@ export function MedicalSuppliesPage() {
     fetchItems();
   }, []);
 
-  // Filter items based on search and filters
+  // Filter items based on search, filters, and tab
   useEffect(() => {
     const filtered = items.filter((item) => {
       const matchesText =
@@ -193,11 +199,17 @@ export function MedicalSuppliesPage() {
         typeFilter === "all" ||
         item.typeOfSupply === typeFilter;
 
-      return matchesText && matchesExpiry && matchesType;
+      // Filter based on active tab
+      const matchesTab =
+        (activeTab === "inventory" && !item.isDonated && !item.isArchived) ||
+        (activeTab === "donated" && item.isDonated) ||
+        (activeTab === "archived" && item.isArchived);
+
+      return matchesText && matchesExpiry && matchesType && matchesTab;
     });
 
     setFilteredItems(filtered);
-  }, [items, searchQuery, expiredFilter, typeFilter]);
+  }, [items, searchQuery, expiredFilter, typeFilter, activeTab]);
 
   const handleItemClick = (item: SupplyItem) => {
     setSelectedItem(item);
@@ -305,6 +317,8 @@ export function MedicalSuppliesPage() {
       quantity: 0,
       imageUrl: "/logo.png",
       isExpired: false,
+      isDonated: false,
+      isArchived: false,
       typeOfSupply: "",
       palletLocation: "",
       company: "",
@@ -350,6 +364,8 @@ export function MedicalSuppliesPage() {
         quantity: formData.quantity || 0,
         image_url: imageUrl,
         is_expired: formData.isExpired || false,
+        is_donated: formData.isDonated || false,
+        is_archived: formData.isArchived || false,
         type_of_supply: formData.typeOfSupply,
         pallet_location: formData.palletLocation || "",
         company: formData.company || "",
@@ -390,6 +406,8 @@ export function MedicalSuppliesPage() {
               quantity: updatedRow.quantity || 0,
               imageUrl: updatedRow.image_url || "/logo.png",
               isExpired: updatedRow.is_expired || false,
+              isDonated: updatedRow.is_donated || false,
+              isArchived: updatedRow.is_archived || false,
               typeOfSupply: updatedRow.type_of_supply || "",
               palletLocation: updatedRow.pallet_location || "",
               company: updatedRow.company || "",
@@ -412,6 +430,8 @@ export function MedicalSuppliesPage() {
               quantity: formData.quantity ?? editingItem.quantity,
               imageUrl: formData.imageUrl ?? editingItem.imageUrl,
               isExpired: formData.isExpired ?? editingItem.isExpired,
+              isDonated: formData.isDonated ?? editingItem.isDonated,
+              isArchived: formData.isArchived ?? editingItem.isArchived,
               typeOfSupply: formData.typeOfSupply ?? editingItem.typeOfSupply,
               palletLocation: formData.palletLocation ?? editingItem.palletLocation,
               company: formData.company ?? editingItem.company,
@@ -481,6 +501,8 @@ export function MedicalSuppliesPage() {
             quantity: newRow.quantity || 0,
             imageUrl: finalImageUrl,
             isExpired: newRow.is_expired || false,
+            isDonated: newRow.is_donated || false,
+            isArchived: newRow.is_archived || false,
             typeOfSupply: newRow.type_of_supply || "",
             palletLocation: newRow.pallet_location || "",
             company: newRow.company || "",
@@ -661,71 +683,230 @@ export function MedicalSuppliesPage() {
           </section>
         )}
 
-        {/* Table */}
-        <section className="overflow-hidden rounded-md border bg-white">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Total Units</TableHead>
-                  <TableHead>Expiration</TableHead>
-                  <TableHead>Type of Supply</TableHead>
-                  <TableHead>Image</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredItems.map((item) => {
-                  const expiryClasses = item.isExpired 
-                    ? "text-red-700 bg-red-50 ring-1 ring-red-200" 
-                    : "text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200";
-                  const expiryLabel = item.isExpired ? "Expired" : "Active";
+        {/* Tabs for Inventory, Donated, and Archived */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="donated">Donated</TabsTrigger>
+            <TabsTrigger value="archived">Archived</TabsTrigger>
+          </TabsList>
 
-                  return (
-                    <TableRow 
-                      key={item.id}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => handleItemClick(item)}
-                    >
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell>
-                        <span className="text-lg font-semibold text-gray-900">{item.quantity}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="inline-flex items-center gap-2">
-                          <span className={`rounded px-2 py-0.5 text-xs ${expiryClasses}`}>
-                            {expiryLabel}
-                          </span>
-                          <time className="text-xs text-gray-600">{item.expiresOn}</time>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-600/20">
-                          {item.typeOfSupply}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <a 
-                          href={item.imageUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="group inline-flex items-center gap-2 rounded-md border border-gray-200 p-1 hover:border-blue-300"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <img 
-                            src={item.imageUrl} 
-                            alt={`${item.name} image`} 
-                            className="h-12 w-20 rounded object-cover transition group-hover:opacity-90" 
-                          />
-                        </a>
-                      </TableCell>
+          <TabsContent value="inventory">
+            <section className="overflow-hidden rounded-md border bg-white">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Total Units</TableHead>
+                      <TableHead>Expiration</TableHead>
+                      <TableHead>Type of Supply</TableHead>
+                      <TableHead>Image</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => {
+                      const expiryClasses = item.isExpired
+                        ? "text-red-700 bg-red-50 ring-1 ring-red-200"
+                        : "text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200";
+                      const expiryLabel = item.isExpired ? "Expired" : "Active";
+
+                      return (
+                        <TableRow
+                          key={item.id}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => handleItemClick(item)}
+                        >
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>
+                            <span className="text-lg font-semibold text-gray-900">{item.quantity}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="inline-flex items-center gap-2">
+                              <span className={`rounded px-2 py-0.5 text-xs ${expiryClasses}`}>
+                                {expiryLabel}
+                              </span>
+                              <time className="text-xs text-gray-600">{item.expiresOn}</time>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-600/20">
+                              {item.typeOfSupply}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <a
+                              href={item.imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group inline-flex items-center gap-2 rounded-md border border-gray-200 p-1 hover:border-blue-300"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <img
+                                src={item.imageUrl}
+                                alt={`${item.name} image`}
+                                className="h-12 w-20 rounded object-cover transition group-hover:opacity-90"
+                              />
+                            </a>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredItems.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  No items in inventory match your filters.
+                </div>
+              )}
+            </section>
+          </TabsContent>
+
+          <TabsContent value="donated">
+            <section className="overflow-hidden rounded-md border bg-white">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Total Units</TableHead>
+                      <TableHead>Expiration</TableHead>
+                      <TableHead>Type of Supply</TableHead>
+                      <TableHead>Image</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => {
+                      const expiryClasses = item.isExpired
+                        ? "text-red-700 bg-red-50 ring-1 ring-red-200"
+                        : "text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200";
+                      const expiryLabel = item.isExpired ? "Expired" : "Active";
+
+                      return (
+                        <TableRow
+                          key={item.id}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => handleItemClick(item)}
+                        >
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>
+                            <span className="text-lg font-semibold text-gray-900">{item.quantity}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="inline-flex items-center gap-2">
+                              <span className={`rounded px-2 py-0.5 text-xs ${expiryClasses}`}>
+                                {expiryLabel}
+                              </span>
+                              <time className="text-xs text-gray-600">{item.expiresOn}</time>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-600/20">
+                              {item.typeOfSupply}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <a
+                              href={item.imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group inline-flex items-center gap-2 rounded-md border border-gray-200 p-1 hover:border-blue-300"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <img
+                                src={item.imageUrl}
+                                alt={`${item.name} image`}
+                                className="h-12 w-20 rounded object-cover transition group-hover:opacity-90"
+                              />
+                            </a>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredItems.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  No donated items match your filters.
+                </div>
+              )}
+            </section>
+          </TabsContent>
+
+          <TabsContent value="archived">
+            <section className="overflow-hidden rounded-md border bg-white">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Total Units</TableHead>
+                      <TableHead>Expiration</TableHead>
+                      <TableHead>Type of Supply</TableHead>
+                      <TableHead>Image</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => {
+                      const expiryClasses = item.isExpired
+                        ? "text-red-700 bg-red-50 ring-1 ring-red-200"
+                        : "text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200";
+                      const expiryLabel = item.isExpired ? "Expired" : "Active";
+
+                      return (
+                        <TableRow
+                          key={item.id}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => handleItemClick(item)}
+                        >
+                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>
+                            <span className="text-lg font-semibold text-gray-900">{item.quantity}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="inline-flex items-center gap-2">
+                              <span className={`rounded px-2 py-0.5 text-xs ${expiryClasses}`}>
+                                {expiryLabel}
+                              </span>
+                              <time className="text-xs text-gray-600">{item.expiresOn}</time>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-600/20">
+                              {item.typeOfSupply}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <a
+                              href={item.imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group inline-flex items-center gap-2 rounded-md border border-gray-200 p-1 hover:border-blue-300"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <img
+                                src={item.imageUrl}
+                                alt={`${item.name} image`}
+                                className="h-12 w-20 rounded object-cover transition group-hover:opacity-90"
+                              />
+                            </a>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredItems.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  No archived items match your filters.
+                </div>
+              )}
+            </section>
+          </TabsContent>
+        </Tabs>
 
         {/* Item Detail Modal */}
         <Dialog open={isItemModalOpen} onOpenChange={setIsItemModalOpen}>
@@ -749,15 +930,29 @@ export function MedicalSuppliesPage() {
                       <p><span className="font-medium">Pallet Location:</span> {selectedItem.palletLocation}</p>
                       <p><span className="font-medium">Quantity:</span> {selectedItem.quantity}</p>
                       <p><span className="font-medium">Expiration:</span> {selectedItem.expiresOn}</p>
-                      <p><span className="font-medium">Status:</span> 
+                      <p><span className="font-medium">Status:</span>
                         <span className={`ml-2 px-2 py-1 rounded text-xs ${
-                          selectedItem.isExpired 
-                            ? "text-red-700 bg-red-50 ring-1 ring-red-200" 
+                          selectedItem.isExpired
+                            ? "text-red-700 bg-red-50 ring-1 ring-red-200"
                             : "text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200"
                         }`}>
                           {selectedItem.isExpired ? "Expired" : "Active"}
                         </span>
                       </p>
+                      {selectedItem.isDonated && (
+                        <p><span className="font-medium">Donation Status:</span>
+                          <span className="ml-2 px-2 py-1 rounded text-xs text-purple-700 bg-purple-50 ring-1 ring-purple-200">
+                            Donated
+                          </span>
+                        </p>
+                      )}
+                      {selectedItem.isArchived && (
+                        <p><span className="font-medium">Archive Status:</span>
+                          <span className="ml-2 px-2 py-1 rounded text-xs text-amber-700 bg-amber-50 ring-1 ring-amber-200">
+                            Archived
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div>
@@ -905,6 +1100,28 @@ export function MedicalSuppliesPage() {
                       />
                       <Label htmlFor="editIsExpired" className="text-sm font-medium text-gray-700">
                         Mark as Expired
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="editIsDonated"
+                        checked={formData.isDonated || false}
+                        onCheckedChange={(checked) => handleInputChange("isDonated", checked === true)}
+                      />
+                      <Label htmlFor="editIsDonated" className="text-sm font-medium text-gray-700">
+                        Mark as Donated
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="editIsArchived"
+                        checked={formData.isArchived || false}
+                        onCheckedChange={(checked) => handleInputChange("isArchived", checked === true)}
+                      />
+                      <Label htmlFor="editIsArchived" className="text-sm font-medium text-gray-700">
+                        Mark as Archived
                       </Label>
                     </div>
                   </div>
@@ -1160,12 +1377,34 @@ export function MedicalSuppliesPage() {
                         Mark as Expired
                       </Label>
                     </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="newItemIsDonated"
+                        checked={formData.isDonated || false}
+                        onCheckedChange={(checked) => handleInputChange("isDonated", checked === true)}
+                      />
+                      <Label htmlFor="newItemIsDonated" className="text-sm font-medium text-gray-700">
+                        Mark as Donated
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="newItemIsArchived"
+                        checked={formData.isArchived || false}
+                        onCheckedChange={(checked) => handleInputChange("isArchived", checked === true)}
+                      />
+                      <Label htmlFor="newItemIsArchived" className="text-sm font-medium text-gray-700">
+                        Mark as Archived
+                      </Label>
+                    </div>
                   </div>
 
                   {/* Basic Information */}
                   <div className="space-y-4">
                     <h3 className="text-md font-medium text-gray-900 border-b border-gray-200 pb-2">Basic Information</h3>
-                    
+
                     <div>
                       <Label htmlFor="newItemDescription" className="block text-sm font-medium text-gray-700 mb-1">Description</Label>
                       <Textarea
